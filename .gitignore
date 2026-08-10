@@ -1,0 +1,11 @@
+# Local environment files
+.env
+.env.*
+
+# Local authentik data (docker-compose local testing)
+data/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
