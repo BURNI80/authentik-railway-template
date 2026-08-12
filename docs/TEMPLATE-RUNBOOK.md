@@ -50,12 +50,12 @@ Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
      Usa SIEMPRE la forma con `sh -c "exec ..."`.
 4. **Networking**: habilita **Public Networking (HTTP)**. Railway inyecta `PORT`.
    - Anadir variable `PORT=9000` (Authentik escucha en 9000 por defecto).
-5. **Healthcheck** (Settings → Deploy): path `/-/health/ready/`, timeout **600s** (RECOMENDADO).
+5. **Healthcheck** (Settings → Deploy): path `/-/health/ready/`, timeout **600s** (INCLUIDO).
    - Devuelve 200 solo cuando la conexion a Postgres esta lista; el primer boot corre migraciones.
-   - **NO esta en la template publicada (2026-08-12)**: anadirla y republicar para mejor UX.
-6. **Volumen**: Attach Volume, mount path **`/data`** (min 1 GB) (RECOMENDADO).
+   - **Añadido a la template publicada (2026-08-12)** via composer (edicion sobre la existente).
+6. **Volumen**: Attach Volume, mount path **`/data`** (min 1 GB) (INCLUIDO).
    - Sin volumen, la media subida (icons, logos) se pierde en cada redeploy.
-   - **NO esta en la template publicada (2026-08-12)**: anadirla y republicar.
+   - **Añadido a la template publicada (2026-08-12)** via composer (edicion sobre la existente).
 7. **Variables** (tab Variables). Todas con referencia, sin valores hardcodeados:
 
    | Variable | Valor |
@@ -150,7 +150,7 @@ region europe-west4, runtime V2) desplegado con la configuracion de `template.js
    - 3 servicios (Postgres, Authentik Server, Authentik Worker).
    - Variables con referencias `${{...}}` y funciones `secret()` (resueltas al desplegar).
    - Networking publico del server (`PORT=9000`).
-   - PENDIENTE en la publicada: volumen `/data` y healthcheck (ver checklist).
+   - Healthcheck `/-/health/ready/` (600s) y volumen `/data` en el server (anadidos en la publicada).
 3. Composer → **Overview / Metadata** (valores usados en la publicacion):
    - **Nombre**: `Authentik (SSO + MFA)`
    - **Categoria**: `Authentication`
@@ -190,8 +190,8 @@ Si el proyecto es open source y quieres el badge + mejor posicion:
 - [x] Sin credenciales hardcodeadas; secretos con `secret()`.
 - [x] `AUTHENTIK_SECRET_KEY` identica en server/worker (via referencia `${{"Authentik Server".AUTHENTIK_SECRET_KEY}}`).
 - [x] Postgres solo por red privada (`${{Postgres.*}}`).
-- [ ] Healthcheck `/-/health/ready/` con timeout 600s en el server. **PENDIENTE en la publicada.**
-- [ ] Volumen `/data` en el server. **PENDIENTE en la publicada.**
+- [x] Healthcheck `/-/health/ready/` con timeout 600s en el server (anadido 2026-08-12).
+- [x] Volumen `/data` en el server (anadido 2026-08-12).
 - [x] Prueba e2e completa (registro en seccion 6.1).
 - [x] Template publicado (`authentik-sso-mfa`), boton actualizado en README, coste documentado.
 - [ ] Verificacion de partner (opcional, seccion 9).
@@ -204,9 +204,10 @@ Si el proyecto es open source y quieres el badge + mejor posicion:
   ENTRYPOINT en exec form; un string como `server` falla y `/lifecycle/ak server` añade un proceso
   Python extra. La forma `/bin/sh -c "exec ak server"` es la probada en un deploy real.
 - **Storage en `/data`** (no `/media`): cambio del path en versiones 2026.x.
-- **Template publicada sin healthcheck ni volumen `/data` (2026-08-12)**: el composer capturo el
-  proyecto tal cual; el healthcheck del server y el volumen quedaron fuera de la publicacion.
-  Recomendado: anadirlos en el composer y republicar (ver checklist). Sin el volumen, la media
-  se pierde al redeploy.
+- **Healthcheck y volumen `/data` anadidos a la publicada (2026-08-12)**: se edito la template
+  existente desde el composer del dashboard (no hay mutation publica para añadir healthcheck o
+  volume a servicios de una template; `templateVolumeUpdate` solo redimensiona volumenes ya
+  existentes). Verificado por API que `healthcheckPath: "/-/health/ready/"` y
+  `volumeMounts: { mountPath: "/data" }` estan en `serializedConfig` de "Authentik Server".
 - **Worker sin healthcheck**: no tiene listener HTTP; Railway usa restart policy.
 - **Setup por wizard OOBE** (no bootstrap): el usuario elige su password `akadmin` en el primer boot.

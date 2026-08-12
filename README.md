@@ -38,7 +38,7 @@ Authentik is an open-source Identity Provider that centralises authentication ac
 | **Authentik Worker** | `ghcr.io/goauthentik/server:2026.5.6` | Background tasks (Dramatiq on Postgres). Private network only. |
 | **PostgreSQL** | Railway managed database | Primary datastore. Referenced via `${{Postgres.*}}`, never exposed publicly. |
 
-> **Note:** the published template does not yet attach a persistent volume to the server. For media persistence across redeploys, attach a Railway volume mounted at `/data` on `Authentik Server`. The readiness endpoint `/-/health/ready/` is served by Authentik itself (200 only when the database connection is up).
+> The template attaches a persistent Railway volume at `/data` on the server, so uploaded media (icons, logos, avatars) survives redeploys. The readiness endpoint `/-/health/ready/` is served by Authentik itself (200 only when the database connection is up).
 
 > **No Redis.** Authentik 2026.5+ moved its task queue and cache onto PostgreSQL and dropped Redis, matching the upstream official `docker-compose.yml`. This keeps the stack cheaper and smaller.
 

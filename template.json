@@ -24,6 +24,16 @@
         "registry": "GHCR"
       },
       "startCommand": "/bin/sh -c \"exec ak server\"",
+      "deploy": {
+        "healthcheckPath": "/-/health/ready/",
+        "healthcheckTimeoutSeconds": 600,
+        "note": "Healthcheck added to the published template on 2026-08-12. Returns 200 only once the database connection is up, so Railway waits through first-boot migrations."
+      },
+      "volumeMounts": {
+        "mountPath": "/data",
+        "minSizeGB": 1,
+        "note": "Persistent volume for uploaded media (icons, logos, user avatars). Without it, media is lost on redeploy."
+      },
       "publicNetworking": {
         "enabled": true,
         "protocol": "http",
@@ -155,7 +165,7 @@
   "notes": [
     "Published as 'Authentik (SSO + MFA)' at https://railway.com/deploy/authentik-sso-mfa on 2026-08-12.",
     "Snapshot of the published composer config: service names are 'Authentik Server' and 'Authentik Worker'; AUTHENTIK_SECRET_KEY is generated on the server with ${{secret(64, ...)}} and referenced from the worker with ${{'Authentik Server'.AUTHENTIK_SECRET_KEY}}.",
-    "NOT yet in the published template (recommended additions): a Railway healthcheck on /-/health/ready/ (timeout 600s) and a persistent volume mounted at /data. Without the /data volume, uploaded media is lost on redeploy.",
+    "Healthcheck /-/health/ready/ (timeout 600s) and persistent volume at /data (min 1 GB) added to 'Authentik Server' in the published template on 2026-08-12 (verified via template serializedConfig).",
     "No Redis: authentik 2026.5+ dropped Redis. The task queue (Dramatiq) and cache run on PostgreSQL, matching upstream's official docker-compose.",
     "Admin setup happens through the out-of-the-box wizard at /if/flow/initial-setup/ on first boot. No bootstrap variables are pre-set on purpose: the user picks their own akadmin password.",
     "Pin policy: the image tag is fixed to a specific release. Never use :latest in a published template.",
