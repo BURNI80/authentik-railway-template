@@ -5,7 +5,27 @@
 
 Self-host [Authentik](https://goauthentik.io) — a modern, open-source Identity Provider (OAuth2/OIDC/SAML/LDAP/SCIM) — on Railway with one click.
 
-## Deploy and Host Authentik with Railway
+## Table of contents
+
+- [Overview](#overview)
+- [What's included](#whats-included)
+- [How it works](#how-it-works)
+- [Deploy](#deploy)
+- [Post-deploy steps](#post-deploy-steps)
+- [Verify the deployment](#verify-the-deployment)
+- [Local development (Docker Compose)](#local-development-docker-compose)
+- [Estimated cost](#estimated-cost)
+- [Optional configuration](#optional-configuration)
+- [Custom domain](#custom-domain)
+- [Upgrading](#upgrading)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [About hosting Authentik](#about-hosting-authentik)
+- [Common use cases](#common-use-cases)
+- [Deployment dependencies](#deployment-dependencies)
+- [License](#license)
+
+## Overview
 
 Authentik is an open-source Identity Provider that centralises authentication across all your applications. It gives you SSO, MFA, user lifecycle management, and a policy engine for a fraction of the cost of Okta or Auth0. This template deploys the full Authentik stack — **server**, **worker**, and a managed **PostgreSQL** database — pre-wired over Railway's private network with an auto-generated secret key. You configure nothing: just deploy, open the URL, and create your admin account.
 
@@ -19,6 +39,34 @@ Authentik is an open-source Identity Provider that centralises authentication ac
 | **Volume** | Railway volume, 1 GB min | Persists media, uploaded icons and certificates at `/data`. |
 
 > **No Redis.** Authentik 2026.5+ moved its task queue and cache onto PostgreSQL and dropped Redis, matching the upstream official `docker-compose.yml`. This keeps the stack cheaper and smaller.
+
+## How it works
+
+```
+                       Internet
+                          │  HTTPS
+                          ▼
+                ┌───────────────────────┐        ┌───────────────────────┐
+                │   authentik-server    │        │   authentik-worker    │
+                │   (public, :9000)     │        │   (private, no domain)│
+                │  UI · API · SSO       │        │  background tasks     │
+                └───────────┬───────────┘        └───────────┬───────────┘
+                            │      Railway private network   │
+                            └───────────┐        ┌───────────┘
+                                        ▼        ▼
+                                  ┌─────────────────────┐
+                                  │  PostgreSQL (managed)│
+                                  │  `${{Postgres.*}}`  │
+                                  └─────────────────────┘
+```
+
+- **Server** runs the web UI, the REST API and the SSO flows on port `9000`. Railway exposes it over a public HTTPS domain and healthchecks it on `/-/health/ready/` (200 only when the database connection is up).
+- **Worker** runs background work: blueprints, certificate handling, event processing, scheduled tasks. It is never exposed publicly and only talks to PostgreSQL over the private network.
+- **PostgreSQL** is a Railway managed database, referenced by the apps with `${{Postgres.*}}` variables resolved at deploy time.
+- **`AUTHENTIK_SECRET_KEY`** is generated once per deployment (`${{secret(64, ...)}}`), shared between server and worker so sessions stay valid across both.
+- Both apps run with **app sleeping** enabled (Railway's default), so they only bill while awake.
+
+Deep technical documentation (variables, start commands, storage, networking): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Deploy
 
@@ -35,6 +83,34 @@ Authentik is an open-source Identity Provider that centralises authentication ac
 5. Add your first user or connect a source (LDAP, GitHub, etc.) under **Directory**.
 
 That's it — your identity provider is live.
+
+## Verify the deployment
+
+- The healthcheck endpoint `/-/health/ready/` returns **HTTP 200** when the server is ready (503 while it sleeps or boots).
+- Open `https://<service>.up.railway.app/if/admin/` and confirm the admin interface loads and you can log in.
+- In the admin interface go to **System → Workers**: the worker should be listed as `healthy` while it's awake.
+
+> If the site returns **503**, the service is simply sleeping (serverless). Visiting it wakes it in a few seconds.
+
+## Local development (Docker Compose)
+
+The repo includes a `docker-compose.yml` that mirrors the Railway stack for local testing. You need a `.env` with two values:
+
+```dotenv
+AUTHENTIK_SECRET_KEY=<64-char random hex>
+PG_PASS=<your database password>
+```
+
+Then run:
+
+```sh
+docker compose up --build -d
+```
+
+- Authentik is served at `http://localhost:9000`.
+- `AUTHENTIK_SECRET_KEY` must be identical for server and worker (the compose file reads it from `.env` for both).
+- Data lives in `./data` (media) and a Docker volume for PostgreSQL.
+- Note: on Docker Compose the start command is `server`/`worker` (plain). Only on Railway the wrapper `/bin/sh -c "exec ak ..."` is required — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Estimated cost
 
@@ -79,10 +155,12 @@ See the [Authentik configuration docs](https://docs.goauthentik.io/install-confi
 | Symptom | Fix |
 | --- | --- |
 | Setup wizard not reachable / `akadmin` can't be created | The initial-setup flow is only available on first boot. If it expired, set `AUTHENTIK_BOOTSTRAP_EMAIL` and `AUTHENTIK_BOOTSTRAP_PASSWORD` on the worker, then redeploy to a fresh database. |
+| Site shows 503 or 502 | The service is **sleeping** (serverless) or still booting. Wait a few seconds and reload; it wakes on request. If it persists, check the deploy logs for errors. |
 | Deploy stuck in "Building"/healthcheck timeout | First boot runs DB migrations. Wait up to 10 minutes (healthcheck timeout is set to 600s). Check `authentik-server` logs for `PostgreSQL connection successful`. |
 | Worker logs database errors | The worker may start before migrations finish; it retries. Confirm the `Postgres` service is healthy and the `${{Postgres.*}}` references are resolved (no empty values). |
 | Uploaded images disappear after redeploy | The `/data` volume keeps media. If you removed the volume, reattach one at `/data` — existing files are not recoverable. |
 | Login fails with "session" errors | `AUTHENTIK_SECRET_KEY` must match between server and worker. Both read the shared variable — don't override it on one service only. |
+| Background tasks never run | The worker sleeps when idle (free-tier default). It wakes on private-network traffic; for always-on background processing, disable app sleeping on `authentik-worker`. |
 | SSL/proxy errors | Your instance is served over HTTPS by Railway; do not set `AUTHENTIK_DEBUG=true`. |
 
 ## FAQ
@@ -93,9 +171,13 @@ See the [Authentik configuration docs](https://docs.goauthentik.io/install-confi
 
 **Can I run this on the Railway free/Hobby plan?** Yes. With app sleeping enabled (default), both services sleep when idle, so an idle-heavy stack fits the $5 Hobby credit — see the cost table above.
 
+**Why start with the setup wizard instead of a default admin?** Security by default: the wizard makes you choose your own `akadmin` password. Nothing is pre-created with a known password.
+
+**Do I need to configure anything?** No. The template resolves PostgreSQL connection variables and the secret key for you at deploy time.
+
 ## About hosting Authentik
 
-Authentik is a full-featured IAM platform written in Python, released under the MIT license by Authentik Security Inc. Railway hosts your infrastructure, so you don't have to configure Postgres, TLS, or healthchecks yourself — deploy and manage everything from one dashboard.
+Authentik is a full-featured IAM platform written in Python (2026.5+ ships a Rust core binary), released under the MIT license by Authentik Security Inc. Railway hosts your infrastructure, so you don't have to configure Postgres, TLS, or healthchecks yourself — deploy and manage everything from one dashboard.
 
 ## Common use cases
 

@@ -4,6 +4,7 @@ Guia interna para el autor. Pasos para (1) levantar el proyecto, (2) probarlo en
 (3) publicarlo como template en el marketplace y (4) opcionalmente pedir verificacion de partner.
 
 Referencia de configuracion exacta: [template.json](../template.json) (snapshot fiel del composer).
+Arquitectura y variables en detalle: [ARCHITECTURE.md](ARCHITECTURE.md).
 Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
 
 > Restricciones del proyecto (AGENTS.md): no subir a GitHub ni usar el CLI de Railway hasta
@@ -102,6 +103,30 @@ Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
    (System → Workers muestra el worker en `healthy`).
 6. Captura de pantallas: setup wizard, admin dashboard, workers, topology del proyecto.
 7. (Opcional) Prueba local antes de Railway con `docker compose up` (ver `../docker-compose.yml`).
+
+## 6.1 Registro de validacion (proyecto real, 2026-08-12)
+
+Evidencia recogida en el proyecto de prueba `authentik-template-test` (workspace BURNI80,
+region europe-west4, runtime V2) desplegado con la configuracion de `template.json`.
+
+- **Deploys**: `authentik-server`, `authentik-worker` y `Postgres` en estado `SUCCESS`.
+- **Start commands aplicados** (Settings -> Deploy): `/bin/sh -c "exec ak server"` y
+  `/bin/sh -c "exec ak worker"` — confirmados en el manifest del servicio y funcionando.
+- **Primer boot**: logs del server con `Starting migration` → `No migrations to apply` →
+  `System check identified no issues` → binario Rust escuchando en `:9000`.
+- **Healthcheck**: `GET /-/health/ready/` → **HTTP 200** cuando el server esta despierto.
+  Mientras duerme devuelve 503; al recibir trafico despierta en segundos (comportamiento
+  serverless esperado).
+- **Wizard OOBE**: `/if/flow/initial-setup/` responde 200 y permite crear el password de `akadmin`.
+- **Variables**: `AUTHENTIK_WEB__WORKERS=1` verificado por CLI (`railway variables`).
+- **Bugs encontrados y descartados**:
+  - `server`/`worker` a secas como start command → deploy falla sin logs (override del
+    ENTRYPOINT en exec form → `["server"]` no encontrado).
+  - `/lifecycle/ak server` → funcional pero con un proceso Python extra (bootstrap + `exec`).
+  - La solucion adoptada `/bin/sh -c "exec ak ..."` es la que quedo probada en el deploy real.
+
+> Leccion para el composer: verificar siempre el valor efectivo del start command en el
+> manifest del servicio desplegado, no solo en el JSON del template.
 
 ## 7. Generar y publicar el template
 
