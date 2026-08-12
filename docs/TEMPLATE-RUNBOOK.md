@@ -33,7 +33,15 @@ Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
 1. **Add New → Docker Image**.
 2. **Image**: `ghcr.io/goauthentik/server:2026.5.6`
    (jamás `:latest`; ver [pin de versiones](https://docs.railway.com/templates/best-practices)).
-3. **Start command**: `/lifecycle/ak server`
+3. **Start command**: `/bin/sh -c "exec ak server"`
+   - IMPORTANTE: no usar `/lifecycle/ak server` ni `server` a secas. Railway aplica el
+     start command como override del ENTRYPOINT en **exec form** (divide el string en palabras):
+     - `server` → `["server"]` → no encontrado, el deploy falla sin logs.
+     - `/lifecycle/ak server` → ejecuta `ak` con `$1=server` (funciona) pero añade un proceso
+       Python extra (bootstrap + `exec` del binario Rust).
+     - `/bin/sh -c "exec ak server"` → `["/bin/sh","-c","exec ak server"]` → **probado en
+       Railway**, sustituye el proceso de `ak` con `exec` y levanta el binario Rust directo.
+     Usa SIEMPRE la forma con `sh -c "exec ..."`.
 4. **Networking**: habilita **Public Networking (HTTP)**. Railway inyecta `PORT`.
    - Anadir variable `PORT=9000` (Authentik escucha en 9000 por defecto).
 5. **Healthcheck** (Settings → Deploy): path `/-/health/ready/`, timeout **600s**.
@@ -59,7 +67,7 @@ Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
 
 1. **Add New → Docker Image**.
 2. **Image**: `ghcr.io/goauthentik/server:2026.5.6`.
-3. **Start command**: `/lifecycle/ak worker`.
+3. **Start command**: `/bin/sh -c "exec ak worker"` (misma regla que el server: forma `sh -c "exec ..."`, nunca `worker` a secas).
 4. **Networking**: sin networking publico.
 5. **Healthcheck**: ninguno (el worker no expone HTTP; Railway lo reinicia con restart policy).
 6. **Variables**: las mismas referencias a Postgres que el server + `AUTHENTIK_SECRET_KEY`
@@ -139,6 +147,7 @@ Si el proyecto es open source y quieres el badge + mejor posicion:
 ## Checklist final
 
 - [ ] Imagen pinneada (no `:latest`).
+- [ ] Start commands con forma `/bin/sh -c "exec ak ..."` (nunca `server`/`worker` a secas ni `/lifecycle/ak ...`).
 - [ ] Sin credenciales hardcodeadas; secretos con `secret()`.
 - [ ] `AUTHENTIK_SECRET_KEY` compartida identica en server/worker.
 - [ ] Postgres solo por red privada (`${{Postgres.*}}`).
@@ -151,6 +160,9 @@ Si el proyecto es open source y quieres el badge + mejor posicion:
 
 - **Sin Redis**: authentik 2026.5+ movio la cola de tareas (Dramatiq) y cache a PostgreSQL y
   quito Redis del compose oficial. Decision aprobada por el autor. Stack final: Authentik + PostgreSQL.
+- **Start command via `sh -c "exec ..."`**: Railway aplica el start command como override del
+  ENTRYPOINT en exec form; un string como `server` falla y `/lifecycle/ak server` añade un proceso
+  Python extra. La forma `/bin/sh -c "exec ak server"` es la probada en un deploy real.
 - **Storage en `/data`** (no `/media`): cambio del path en versiones 2026.x.
 - **Worker sin healthcheck**: no tiene listener HTTP; Railway usa restart policy.
 - **Setup por wizard OOBE** (no bootstrap): el usuario elige su password `akadmin` en el primer boot.

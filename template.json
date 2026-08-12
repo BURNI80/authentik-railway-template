@@ -22,7 +22,7 @@
         "image": "ghcr.io/goauthentik/server:2026.5.6",
         "registry": "GHCR"
       },
-      "startCommand": "/lifecycle/ak server",
+      "startCommand": "/bin/sh -c \"exec ak server\"",
       "publicNetworking": {
         "enabled": true,
         "protocol": "http",
@@ -98,7 +98,7 @@
         "image": "ghcr.io/goauthentik/server:2026.5.6",
         "registry": "GHCR"
       },
-      "startCommand": "/lifecycle/ak worker",
+      "startCommand": "/bin/sh -c \"exec ak worker\"",
       "publicNetworking": {
         "enabled": false,
         "note": "No public access. The worker only talks to Postgres over the private network."
@@ -154,14 +154,14 @@
     }
   ],
   "estimatedCostPerMonthUSD": {
-    "range": "10-25",
+    "range": "0-25",
     "breakdown": {
-      "authentik-server": "~8-15 (1GB RAM / ~0.5 vCPU, always on)",
-      "authentik-worker": "~4-8 (512MB RAM / ~0.25 vCPU, always on)",
+      "authentik-server": "~0-10 (1GB RAM, sleeps when idle on Railway's serverless model; bills only while awake)",
+      "authentik-worker": "~0-6 (512MB RAM, sleeps when idle; bills only while awake)",
       "Postgres": "~3-8 (smallest managed instance)",
       "Volume": "~0.15 (1GB at $0.15/GB-month)"
     },
-    "note": "Exceeds the $5 Hobby monthly credit. New accounts start with a one-time $5 trial credit. See README for current Railway pricing."
+    "note": "Both apps run with app sleeping enabled (Railway default), so idle-heavy usage fits the $5 Hobby monthly credit; active usage approaches $10-25. New accounts start with a one-time $5 trial credit. See README for current Railway pricing."
   },
   "notes": [
     "No Redis: authentik 2026.5+ dropped Redis. The task queue (Dramatiq) and cache run on PostgreSQL, matching upstream's official docker-compose.",

@@ -38,17 +38,17 @@ That's it — your identity provider is live.
 
 ## Estimated cost
 
-Railway bills per second for CPU, RAM and storage (`$20`/vCPU-month, `$10`/GB RAM-month, `$0.15`/GB-month volumes). This stack, kept at minimal sizes and always-on:
+Railway bills per second for CPU, RAM and storage (`$20`/vCPU-month, `$10`/GB RAM-month, `$0.15`/GB-month volumes). Both Authentik services deploy with **app sleeping** enabled (Railway's default), so they bill only while awake — an idle instance costs almost nothing.
 
-| Item | Estimate / month |
+| Item | Estimate / month (idle-heavy) |
 | --- | --- |
-| Authentik server (1 GB RAM) | ~$8–15 |
-| Authentik worker (512 MB RAM) | ~$4–8 |
+| Authentik server (1 GB RAM, sleeps when idle) | ~$0–2 |
+| Authentik worker (512 MB RAM, sleeps when idle) | ~$0–2 |
 | PostgreSQL (smallest managed instance) | ~$3–8 |
 | Volume (1 GB) | ~$0.15 |
-| **Total** | **~$10–25** |
+| **Total** | **~$5–10** |
 
-The Hobby plan includes a **$5/month usage credit**; usage above that is billed on top. New accounts start with a one-time **$5 trial credit**. For a tighter budget you can sleep or scale services down when idle. Check [railway.com/pricing](https://railway.com/pricing) for current rates.
+The Hobby plan includes a **$5/month usage credit**; usage above that is billed on top. New accounts start with a one-time **$5 trial credit**. Under constant active traffic the server stays awake and costs grow toward ~$10–25/month; you can also scale each service per-your-usage. Check [railway.com/pricing](https://railway.com/pricing) for current rates.
 
 ## Optional configuration
 
@@ -91,7 +91,7 @@ See the [Authentik configuration docs](https://docs.goauthentik.io/install-confi
 
 **Does this work with Outposts / proxy auth?** Yes for OAuth2/OIDC/SAML/LDAP providers. The Docker-socket based Proxy Outpost is not supported on Railway (no Docker socket access); use a manual/embedded proxy outpost if you need forward-auth.
 
-**Can I run this on the Railway free/Hobby plan?** Yes, at minimal sizes. Be aware the stack exceeds the $5 Hobby credit — see the cost table above.
+**Can I run this on the Railway free/Hobby plan?** Yes. With app sleeping enabled (default), both services sleep when idle, so an idle-heavy stack fits the $5 Hobby credit — see the cost table above.
 
 ## About hosting Authentik
 
