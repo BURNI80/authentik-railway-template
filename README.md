@@ -1,7 +1,8 @@
 # Authentik on Railway
 
-<!-- Replace TEMPLATE_ID with the real template id after publishing. -->
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/TEMPLATE_ID?utm_medium=integration&utm_source=button&utm_campaign=authentik)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/authentik-sso-mfa?utm_medium=integration&utm_source=button&utm_campaign=authentik)
+
+**Template:** [Authentik (SSO + MFA) on the Railway marketplace](https://railway.com/template/authentik-sso-mfa)
 
 Self-host [Authentik](https://goauthentik.io) — a modern, open-source Identity Provider (OAuth2/OIDC/SAML/LDAP/SCIM) — on Railway with one click.
 
@@ -33,10 +34,11 @@ Authentik is an open-source Identity Provider that centralises authentication ac
 
 | Service | Source | Notes |
 | --- | --- | --- |
-| **Authentik Server** | `ghcr.io/goauthentik/server:2026.5.6` | API, UI, SSO flows. Public domain, healthchecked on `/-/health/ready/`, volume at `/data`. |
+| **Authentik Server** | `ghcr.io/goauthentik/server:2026.5.6` | API, UI, SSO flows. Public HTTPS domain on port 9000. |
 | **Authentik Worker** | `ghcr.io/goauthentik/server:2026.5.6` | Background tasks (Dramatiq on Postgres). Private network only. |
 | **PostgreSQL** | Railway managed database | Primary datastore. Referenced via `${{Postgres.*}}`, never exposed publicly. |
-| **Volume** | Railway volume, 1 GB min | Persists media, uploaded icons and certificates at `/data`. |
+
+> **Note:** the published template does not yet attach a persistent volume to the server. For media persistence across redeploys, attach a Railway volume mounted at `/data` on `Authentik Server`. The readiness endpoint `/-/health/ready/` is served by Authentik itself (200 only when the database connection is up).
 
 > **No Redis.** Authentik 2026.5+ moved its task queue and cache onto PostgreSQL and dropped Redis, matching the upstream official `docker-compose.yml`. This keeps the stack cheaper and smaller.
 
@@ -60,7 +62,7 @@ Authentik is an open-source Identity Provider that centralises authentication ac
                                   └─────────────────────┘
 ```
 
-- **Server** runs the web UI, the REST API and the SSO flows on port `9000`. Railway exposes it over a public HTTPS domain and healthchecks it on `/-/health/ready/` (200 only when the database connection is up).
+- **Server** runs the web UI, the REST API and the SSO flows on port `9000`. Railway exposes it over a public HTTPS domain; the readiness endpoint `/-/health/ready/` returns 200 only when the database connection is up.
 - **Worker** runs background work: blueprints, certificate handling, event processing, scheduled tasks. It is never exposed publicly and only talks to PostgreSQL over the private network.
 - **PostgreSQL** is a Railway managed database, referenced by the apps with `${{Postgres.*}}` variables resolved at deploy time.
 - **`AUTHENTIK_SECRET_KEY`** is generated once per deployment (`${{secret(64, ...)}}`), shared between server and worker so sessions stay valid across both.
@@ -156,7 +158,7 @@ See the [Authentik configuration docs](https://docs.goauthentik.io/install-confi
 | --- | --- |
 | Setup wizard not reachable / `akadmin` can't be created | The initial-setup flow is only available on first boot. If it expired, set `AUTHENTIK_BOOTSTRAP_EMAIL` and `AUTHENTIK_BOOTSTRAP_PASSWORD` on the worker, then redeploy to a fresh database. |
 | Site shows 503 or 502 | The service is **sleeping** (serverless) or still booting. Wait a few seconds and reload; it wakes on request. If it persists, check the deploy logs for errors. |
-| Deploy stuck in "Building"/healthcheck timeout | First boot runs DB migrations. Wait up to 10 minutes (healthcheck timeout is set to 600s). Check `authentik-server` logs for `PostgreSQL connection successful`. |
+| Deploy stuck in "Building" | First boot runs DB migrations. Wait a couple of minutes and check `authentik-server` logs for `PostgreSQL connection successful`. |
 | Worker logs database errors | The worker may start before migrations finish; it retries. Confirm the `Postgres` service is healthy and the `${{Postgres.*}}` references are resolved (no empty values). |
 | Uploaded images disappear after redeploy | The `/data` volume keeps media. If you removed the volume, reattach one at `/data` — existing files are not recoverable. |
 | Login fails with "session" errors | `AUTHENTIK_SECRET_KEY` must match between server and worker. Both read the shared variable — don't override it on one service only. |

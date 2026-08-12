@@ -1,10 +1,11 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
-  "name": "Authentik",
-  "slug": "authentik",
+  "name": "Authentik (SSO + MFA)",
+  "slug": "authentik-sso-mfa",
   "category": "Authentication",
-  "summary": "Self-hosted Identity Provider (OAuth2/OIDC/SAML/LDAP) with SSO, MFA and a policy engine. Deploys authentik server + worker on a managed PostgreSQL database.",
+  "summary": "Self-hosted SSO IdP with MFA and a policy engine.",
   "description": "Authentik is an open-source Identity Provider that centralises authentication across all your apps. This one-click template deploys the full Authentik stack: server (API + UI + SSO flows), worker (background tasks) and a managed PostgreSQL database, pre-wired over Railway private networking with an auto-generated secret key. No manual environment variables required.",
+  "deployUrl": "https://railway.com/deploy/authentik-sso-mfa",
   "pinnedImage": "ghcr.io/goauthentik/server:2026.5.6",
   "services": [
     {
@@ -16,7 +17,7 @@
       "note": "Keep the service name exactly 'Postgres' so the ${{Postgres.*}} references below resolve."
     },
     {
-      "name": "authentik-server",
+      "name": "Authentik Server",
       "type": "docker-image",
       "source": {
         "image": "ghcr.io/goauthentik/server:2026.5.6",
@@ -27,17 +28,8 @@
         "enabled": true,
         "protocol": "http",
         "portVariable": "PORT",
-        "targetPort": 9000
-      },
-      "healthcheck": {
-        "path": "/-/health/ready/",
-        "timeoutSeconds": 600,
-        "note": "Readiness endpoint; returns 200 only when the PostgreSQL connection is up. First boot runs migrations, so keep the timeout generous."
-      },
-      "volume": {
-        "mountPath": "/data",
-        "minimumSizeGB": 1,
-        "note": "Persists media, uploaded icons/backgrounds and certs. Required: without it files are lost on redeploy."
+        "targetPort": 9000,
+        "note": "Railway generates an HTTPS domain and injects PORT for routing."
       },
       "resources": {
         "memoryGB": 1,
@@ -47,12 +39,12 @@
         {
           "key": "PORT",
           "value": "9000",
-          "description": "Tells Railway which port to route and healthcheck."
+          "description": "Tells Railway which port to route. Authentik listens on 9000 by default."
         },
         {
           "key": "AUTHENTIK_SECRET_KEY",
-          "value": "${{shared.AUTHENTIK_SECRET_KEY}}",
-          "description": "Secret key used for cookie signing. Generated once at deploy time and shared with the worker."
+          "value": "${{secret(64, \"abcdef0123456789\")}}",
+          "description": "Random 64-char hex secret (32 bytes), generated once per template deployment. The worker references this value."
         },
         {
           "key": "AUTHENTIK_POSTGRESQL__HOST",
@@ -92,7 +84,7 @@
       ]
     },
     {
-      "name": "authentik-worker",
+      "name": "Authentik Worker",
       "type": "docker-image",
       "source": {
         "image": "ghcr.io/goauthentik/server:2026.5.6",
@@ -103,10 +95,6 @@
         "enabled": false,
         "note": "No public access. The worker only talks to Postgres over the private network."
       },
-      "healthcheck": {
-        "enabled": false,
-        "note": "The worker has no HTTP listener, so no healthcheck path. Railway's restart policy restarts it if it crashes."
-      },
       "resources": {
         "memoryGB": 0.5,
         "note": "The Rust worker entrypoint in 2026.5 uses ~300MB less memory than older versions."
@@ -114,8 +102,8 @@
       "variables": [
         {
           "key": "AUTHENTIK_SECRET_KEY",
-          "value": "${{shared.AUTHENTIK_SECRET_KEY}}",
-          "description": "Must be identical to the server's secret key. Read from the shared variable."
+          "value": "${{\"Authentik Server\".AUTHENTIK_SECRET_KEY}}",
+          "description": "Must be identical to the server's secret key. References the value generated on 'Authentik Server'. Never use a separate ${{secret(...)}} here."
         },
         {
           "key": "AUTHENTIK_POSTGRESQL__HOST",
@@ -141,31 +129,34 @@
           "key": "AUTHENTIK_POSTGRESQL__NAME",
           "value": "${{Postgres.PGDATABASE}}",
           "description": "PostgreSQL database name."
+        },
+        {
+          "key": "AUTHENTIK_DISABLE_UPDATE_CHECK",
+          "value": "true",
+          "description": "Disable the 'check for updates' feature (avoids outbound calls to goauthentik.io). Optional."
+        },
+        {
+          "key": "AUTHENTIK_ERROR_REPORTING__ENABLED",
+          "value": "false",
+          "description": "Keep error reporting off for a clean, minimal deployment. Optional."
         }
       ]
     }
   ],
-  "sharedVariables": [
-    {
-      "key": "AUTHENTIK_SECRET_KEY",
-      "value": "${{secret(64, \"abcdef0123456789\")}}",
-      "description": "Random 64-char hex secret (32 bytes), generated once when the template is deployed.",
-      "fallback": "If the template composer does not expose shared variables, define this on authentik-server and reference it from authentik-worker as ${{authentik-server.AUTHENTIK_SECRET_KEY}}."
-    }
-  ],
   "estimatedCostPerMonthUSD": {
-    "range": "0-25",
+    "range": "0-20",
     "breakdown": {
       "authentik-server": "~0-10 (1GB RAM, sleeps when idle on Railway's serverless model; bills only while awake)",
       "authentik-worker": "~0-6 (512MB RAM, sleeps when idle; bills only while awake)",
-      "Postgres": "~3-8 (smallest managed instance)",
-      "Volume": "~0.15 (1GB at $0.15/GB-month)"
+      "Postgres": "~3-8 (smallest managed instance)"
     },
-    "note": "Both apps run with app sleeping enabled (Railway default), so idle-heavy usage fits the $5 Hobby monthly credit; active usage approaches $10-25. New accounts start with a one-time $5 trial credit. See README for current Railway pricing."
+    "note": "Both apps run with app sleeping enabled (Railway default), so idle-heavy usage fits the $5 Hobby monthly credit; active usage approaches $10-20. New accounts start with a one-time $5 trial credit. See README for current Railway pricing."
   },
   "notes": [
+    "Published as 'Authentik (SSO + MFA)' at https://railway.com/deploy/authentik-sso-mfa on 2026-08-12.",
+    "Snapshot of the published composer config: service names are 'Authentik Server' and 'Authentik Worker'; AUTHENTIK_SECRET_KEY is generated on the server with ${{secret(64, ...)}} and referenced from the worker with ${{'Authentik Server'.AUTHENTIK_SECRET_KEY}}.",
+    "NOT yet in the published template (recommended additions): a Railway healthcheck on /-/health/ready/ (timeout 600s) and a persistent volume mounted at /data. Without the /data volume, uploaded media is lost on redeploy.",
     "No Redis: authentik 2026.5+ dropped Redis. The task queue (Dramatiq) and cache run on PostgreSQL, matching upstream's official docker-compose.",
-    "Storage path is /data in 2026.x (replaced the old /media mount).",
     "Admin setup happens through the out-of-the-box wizard at /if/flow/initial-setup/ on first boot. No bootstrap variables are pre-set on purpose: the user picks their own akadmin password.",
     "Pin policy: the image tag is fixed to a specific release. Never use :latest in a published template.",
     "The initial-setup flow and /if/admin/ login page are served by authentik on PORT=9000 over Railway's HTTPS public domain."

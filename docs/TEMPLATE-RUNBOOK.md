@@ -7,8 +7,13 @@ Referencia de configuracion exacta: [template.json](../template.json) (snapshot 
 Arquitectura y variables en detalle: [ARCHITECTURE.md](ARCHITECTURE.md).
 Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
 
+> **Estado (2026-08-12):** template publicada en el marketplace como **Authentik (SSO + MFA)**
+> (`https://railway.com/deploy/authentik-sso-mfa`, codigo `authentik-sso-mfa`, categoria
+> Authentication). Draft generado con `railway templates create` desde el proyecto
+> `authentik-template-test`. Repo subido a GitHub (`BURNI80/authentik-railway-template`).
+
 > Restricciones del proyecto (AGENTS.md): no subir a GitHub ni usar el CLI de Railway hasta
-> que el autor lo ordene. Este runbook se ejecuta solo cuando se de el visto bueno.
+> que el autor lo ordene. Autorizado y ejecutado: repo en GitHub y template publicada (2026-08-12).
 
 ---
 
@@ -45,9 +50,12 @@ Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
      Usa SIEMPRE la forma con `sh -c "exec ..."`.
 4. **Networking**: habilita **Public Networking (HTTP)**. Railway inyecta `PORT`.
    - Anadir variable `PORT=9000` (Authentik escucha en 9000 por defecto).
-5. **Healthcheck** (Settings → Deploy): path `/-/health/ready/`, timeout **600s**.
+5. **Healthcheck** (Settings → Deploy): path `/-/health/ready/`, timeout **600s** (RECOMENDADO).
    - Devuelve 200 solo cuando la conexion a Postgres esta lista; el primer boot corre migraciones.
-6. **Volumen**: Attach Volume, mount path **`/data`** (min 1 GB).
+   - **NO esta en la template publicada (2026-08-12)**: anadirla y republicar para mejor UX.
+6. **Volumen**: Attach Volume, mount path **`/data`** (min 1 GB) (RECOMENDADO).
+   - Sin volumen, la media subida (icons, logos) se pierde en cada redeploy.
+   - **NO esta en la template publicada (2026-08-12)**: anadirla y republicar.
 7. **Variables** (tab Variables). Todas con referencia, sin valores hardcodeados:
 
    | Variable | Valor |
@@ -72,21 +80,23 @@ Version pinneada actual: `ghcr.io/goauthentik/server:2026.5.6`.
 4. **Networking**: sin networking publico.
 5. **Healthcheck**: ninguno (el worker no expone HTTP; Railway lo reinicia con restart policy).
 6. **Variables**: las mismas referencias a Postgres que el server + `AUTHENTIK_SECRET_KEY`
-   compartida (paso 5). Sin volumen (media la persiste el server).
+   referenciando al server (paso 5). En la version publicada se añadieron ademas
+   `AUTHENTIK_DISABLE_UPDATE_CHECK=true` y `AUTHENTIK_ERROR_REPORTING__ENABLED=false`.
+   Sin volumen (la media la persiste el server via `/data`).
 7. **Recursos**: **512 MB** RAM.
 
 ## 5. Secreto compartido (importante)
 
 `AUTHENTIK_SECRET_KEY` debe ser identica en server y worker.
 
-- **Opcion A (preferida)**: usa **Shared Variables** si el composer del template las expone.
-  En el proyecto normal se define en Project → Settings → Shared Variables
-  `AUTHENTIK_SECRET_KEY = ${{secret(64, "abcdef0123456789")}}`.
-  Ambos servicios referencian `${{shared.AUTHENTIK_SECRET_KEY}}`.
-  La funcion `secret()` genera un valor aleatorio nuevo en CADA despliegue del template.
-- **Opcion B (fallback)**: define el secreto solo en `authentik-server` con
-  `${{secret(64, "abcdef0123456789")}}` y en el worker usa
-  `AUTHENTIK_SECRET_KEY = ${{authentik-server.AUTHENTIK_SECRET_KEY}}`.
+- **Opcion A**: usa **Shared Variables** si el composer del template las expone. Definir UNA
+  vez `AUTHENTIK_SECRET_KEY = ${{secret(64, "abcdef0123456789")}}` y ambos servicios referencian
+  `${{shared.AUTHENTIK_SECRET_KEY}}`. La funcion `secret()` genera un valor aleatorio nuevo en
+  CADA despliegue del template.
+- **Opcion B (la usada en la template publicada)**: definir el secreto SOLO en
+  `Authentik Server` con `${{secret(64, "abcdef0123456789")}}` y en `Authentik Worker` usar
+  `AUTHENTIK_SECRET_KEY = ${{"Authentik Server".AUTHENTIK_SECRET_KEY}}`. Si el nombre del
+  servicio lleva espacios, el composer lo serializa entre comillas dobles dentro de la referencia.
 
 > No uses `${{secret(...)}}` por separado en los dos servicios: generaria dos claves distintas
 > y romperia las sesiones.
@@ -130,32 +140,36 @@ region europe-west4, runtime V2) desplegado con la configuracion de `template.js
 
 ## 7. Generar y publicar el template
 
+> EJECUTADO (2026-08-12): draft creado con `railway templates create` y publicado como
+> `authentik-sso-mfa`. Pasos para reproducir o para futuras re-publicaciones:
+
 1. En el proyecto: **Settings → Generate Template from Project** → **Create Template**.
+   (o via CLI: `railway templates create --project <ID> --environment production --json`)
    Se abre el **composer**.
 2. Revisa que el composer capture todo (espejo de `template.json`):
-   - 3 servicios (Postgres, authentik-server, authentik-worker).
+   - 3 servicios (Postgres, Authentik Server, Authentik Worker).
    - Variables con referencias `${{...}}` y funciones `secret()` (resueltas al desplegar).
-   - Volumen `/data`, healthcheck, networking publico del server.
-3. Composer → **Overview / Metadata**:
-   - **Nombre**: `Authentik`
+   - Networking publico del server (`PORT=9000`).
+   - PENDIENTE en la publicada: volumen `/data` y healthcheck (ver checklist).
+3. Composer → **Overview / Metadata** (valores usados en la publicacion):
+   - **Nombre**: `Authentik (SSO + MFA)`
    - **Categoria**: `Authentication`
-   - **Icono**: logo authentik (1:1, fondo transparente). Ejemplo:
+   - **Icono**: logo authentik 1:1:
      `https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/authentik.svg`
-   - **Descripcion corta**: la de `template.json` (`summary`).
-   - **README/Overview**: copia y adapta el contenido de `../README.md`
-     (secciones H1/H2: Deploy and Host, About, Use Cases, Dependencies, Why, FAQ).
-4. **Publish** (workspace → Templates → Publicar). El template queda en el marketplace
-   (private/tests mientras tanto: publicar solo cuando esté probado).
-5. Copia el **template ID** de la URL (`railway.com/new/template/<ID>`) y actualiza
-   `README.md` (boton Deploy on Railway) y `docs/` si procede.
+   - **Descripcion corta**: `Self-hosted SSO IdP with MFA and a policy engine.`
+   - **README/Overview**: el contenido de `COMPOSER-OVERVIEW.md`.
+4. **Publish** (workspace → Templates → Publicar). El template queda en el marketplace.
+5. Copia el **template code** (`authentik-sso-mfa`) y actualiza `README.md` (boton Deploy)
+   y `docs/` si procede. URL de deploy: `https://railway.com/deploy/authentik-sso-mfa`.
 
 ## 8. Boton Deploy on Railway
 
 ```md
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/<TEMPLATE_ID>?utm_medium=integration&utm_source=button&utm_campaign=authentik)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/authentik-sso-mfa?utm_medium=integration&utm_source=button&utm_campaign=authentik)
 ```
 
-Reemplaza `<TEMPLATE_ID>` con el ID real tras publicar.
+Codigo real: `authentik-sso-mfa` · URL corta: `https://railway.com/deploy/authentik-sso-mfa` ·
+Pagina del template: `https://railway.com/template/authentik-sso-mfa`.
 
 ## 9. (Opcional) Verificacion de partner
 
@@ -171,15 +185,16 @@ Si el proyecto es open source y quieres el badge + mejor posicion:
 
 ## Checklist final
 
-- [ ] Imagen pinneada (no `:latest`).
-- [ ] Start commands con forma `/bin/sh -c "exec ak ..."` (nunca `server`/`worker` a secas ni `/lifecycle/ak ...`).
-- [ ] Sin credenciales hardcodeadas; secretos con `secret()`.
-- [ ] `AUTHENTIK_SECRET_KEY` compartida identica en server/worker.
-- [ ] Postgres solo por red privada (`${{Postgres.*}}`).
-- [ ] Healthcheck `/-/health/ready/` con timeout 600s en el server.
-- [ ] Volumen `/data` en el server.
-- [ ] Prueba e2e completa + capturas.
-- [ ] Template publicado, boton actualizado en README, coste estimado documentado.
+- [x] Imagen pinneada (no `:latest`).
+- [x] Start commands con forma `/bin/sh -c "exec ak ..."` (nunca `server`/`worker` a secas ni `/lifecycle/ak ...`).
+- [x] Sin credenciales hardcodeadas; secretos con `secret()`.
+- [x] `AUTHENTIK_SECRET_KEY` identica en server/worker (via referencia `${{"Authentik Server".AUTHENTIK_SECRET_KEY}}`).
+- [x] Postgres solo por red privada (`${{Postgres.*}}`).
+- [ ] Healthcheck `/-/health/ready/` con timeout 600s en el server. **PENDIENTE en la publicada.**
+- [ ] Volumen `/data` en el server. **PENDIENTE en la publicada.**
+- [x] Prueba e2e completa (registro en seccion 6.1).
+- [x] Template publicado (`authentik-sso-mfa`), boton actualizado en README, coste documentado.
+- [ ] Verificacion de partner (opcional, seccion 9).
 
 ## Desviaciones del brief (para el informe final)
 
@@ -189,5 +204,9 @@ Si el proyecto es open source y quieres el badge + mejor posicion:
   ENTRYPOINT en exec form; un string como `server` falla y `/lifecycle/ak server` añade un proceso
   Python extra. La forma `/bin/sh -c "exec ak server"` es la probada en un deploy real.
 - **Storage en `/data`** (no `/media`): cambio del path en versiones 2026.x.
+- **Template publicada sin healthcheck ni volumen `/data` (2026-08-12)**: el composer capturo el
+  proyecto tal cual; el healthcheck del server y el volumen quedaron fuera de la publicacion.
+  Recomendado: anadirlos en el composer y republicar (ver checklist). Sin el volumen, la media
+  se pierde al redeploy.
 - **Worker sin healthcheck**: no tiene listener HTTP; Railway usa restart policy.
 - **Setup por wizard OOBE** (no bootstrap): el usuario elige su password `akadmin` en el primer boot.
